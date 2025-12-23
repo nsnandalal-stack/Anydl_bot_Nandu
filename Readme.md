@@ -11,7 +11,10 @@ Supports **`.torrent` file uploads**, strict limits, and **owner-only access**.
 
 ## 🚀 One-Click Deploy (Heroku)
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](
+https://www.heroku.com/deploy?template=https://github.com/nsnandalal/Anydl_bot_Nandu
+
+
 
 > Heroku will read `app.json` and prompt you for required environment variables.
 
