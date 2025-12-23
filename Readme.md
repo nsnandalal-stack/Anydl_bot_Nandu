@@ -10,7 +10,8 @@ A **private Telegram downloader bot** built with **Pyrogram v2**, designed stric
 
 ## 🚀 One-Click Deploy (Railway)
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?source=github)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new)
+
 
 > After clicking the button, connect your GitHub repo when prompted.  
 > Railway will auto-detect **Docker** and build automatically.
