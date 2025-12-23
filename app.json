@@ -1,0 +1,10 @@
+{
+  "name": "ANYDL Owner Only",
+  "stack": "container",
+  "env": {
+    "API_ID": { "required": true },
+    "API_HASH": { "required": true },
+    "BOT_TOKEN": { "required": true },
+    "OWNER_IDS": { "required": true }
+  }
+}
