@@ -1,0 +1,14 @@
+anydl-owner-only/
+├── bot.py
+├── config.py
+├── auth.py
+├── cleanup.py
+├── requirements.txt
+├── Dockerfile
+├── Procfile
+├── app.json
+├── README.md
+└── plugins/
+    ├── torrent.py
+    ├── status.py
+    └── stop.py
