@@ -1,11 +1,6 @@
-Anydl_bot_Nandu/
+torrent_bot/
 ├── bot.py
 ├── config.py
-├── auth.py
-├── cleanup.py
-├── plugins/
-│   ├── torrent_file.py
-│   ├── status.py
-│   └── stop.py
-└── requirements.txt
-
+├── downloader.py
+├── requirements.txt
+└── README.md
