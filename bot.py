@@ -1,41 +1,76 @@
 import asyncio
-import logging
-from pyrogram import Client, filters
-
-from config import API_ID, API_HASH, BOT_TOKEN, LOG_LEVEL
-from auth import owner_only
-from cleanup import cleanup_loop
-
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(levelname)s | %(message)s"
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
 )
 
-app = Client(
-    "anydl-owner-only",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-    plugins=dict(root="plugins")
-)
+from config import BOT_TOKEN, OWNER_ID, DOWNLOAD_DIR
+from downloader import start_download, stop_download, download_status
 
-@app.on_message(filters.private & filters.command("start") & owner_only())
-async def start(_, message):
-    await message.reply_text(
-        "✅ Owner-only downloader bot running.\n\n"
-        "Upload a .torrent file to start.\n"
-        "/status – progress\n"
+
+def owner_only(update: Update) -> bool:
+    return update.effective_user and update.effective_user.id == OWNER_ID
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not owner_only(update):
+        await update.message.reply_text("❌ Not authorized.")
+        return
+
+    await update.message.reply_text(
+        "✅ Torrent Bot Ready\n\n"
+        "Send a magnet link to start download.\n\n"
+        "/status – check progress\n"
         "/stop – stop download"
     )
 
-@app.on_message(filters.private & ~owner_only() & ~filters.command("start"))
-async def unauthorized(_, message):
-    await message.reply_text("❌ Not authorized.")
+
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not owner_only(update):
+        return
+
+    await update.message.reply_text(download_status())
+
+
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not owner_only(update):
+        return
+
+    if stop_download():
+        await update.message.reply_text("🛑 Download stopped.")
+    else:
+        await update.message.reply_text("ℹ️ No active download.")
+
+
+async def magnet_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not owner_only(update):
+        return
+
+    text = update.message.text.strip()
+
+    if not text.startswith("magnet:"):
+        await update.message.reply_text("❌ Send a valid magnet link.")
+        return
+
+    ok, msg = start_download(text, DOWNLOAD_DIR)
+    await update.message.reply_text("⬇️ " + msg)
+
 
 async def main():
-    await app.start()
-    asyncio.create_task(cleanup_loop())
-    await asyncio.Event().wait()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("stop", stop))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, magnet_handler))
+
+    print("✅ Bot running (Python 3.11)")
+    await app.run_polling()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
