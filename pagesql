@@ -1,6 +1,0 @@
-torrent_bot/
-├── bot.py
-├── config.py
-├── downloader.py
-├── requirements.txt
-└── README.md
