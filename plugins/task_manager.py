@@ -3,7 +3,7 @@ import os
 
 # --- 🔒 SECURITY SETTINGS ---
 # 👇 PASTE YOUR ID HERE (Replace 123456789 with your real number)
-AUTH_USERS = [123456789] 
+AUTH_USERS = [519459195] 
 
 # Helper to check if user is allowed
 def is_authorized(user_id):
