@@ -2,7 +2,7 @@ from pyrogram import Client, filters
 import os
 
 # --- 🔒 SECURITY SETTINGS ---
-# 👇 PASTE YOUR ID HERE (Replace 123456789 with your real number)
+# Only this User ID can control the bot
 AUTH_USERS = [519459195] 
 
 # Helper to check if user is allowed
