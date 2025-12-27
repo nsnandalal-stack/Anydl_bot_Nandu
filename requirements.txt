@@ -1,5 +1,5 @@
 pyrogram
-tgcrypto
-rom
+TgCrypto
 yt-dlp
 aria2p
+aiohttp
