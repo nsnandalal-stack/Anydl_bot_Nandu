@@ -76,7 +76,7 @@ def run_ytdlp(url, quality_setting, output_path):
         ext = 'mp3' if quality_setting == 'audio' else 'mp4'
         return ydl.prepare_filename(info).rsplit('.', 1)[0] + f'.{ext}'
 
-# --- (Rest of code remains identical, standard helpers below) ---
+# --- 3. HELPER: FIND LARGEST FILE ---
 def find_largest_file(path):
     if os.path.isfile(path): return path
     largest_file, largest_size = None, 0
@@ -87,7 +87,7 @@ def find_largest_file(path):
             if fs > largest_size: largest_size = fs; largest_file = fp
     return largest_file
 
-# --- 3. ENTRY POINT ---
+# --- 4. ENTRY POINT ---
 @Client.on_message(filters.private & (filters.regex(r'http') | filters.regex(r'magnet') | filters.document | filters.video | filters.audio))
 async def incoming_task(client, message):
     user_id = message.from_user.id
@@ -141,7 +141,7 @@ async def incoming_task(client, message):
         
     await show_dashboard(client, message.chat.id, sent_msg.id, user_id)
 
-# --- 4. DASHBOARD ---
+# --- 5. DASHBOARD ---
 async def show_dashboard(client, chat_id, message_id, user_id):
     if user_id not in TASKS: return
     task = TASKS[user_id]
@@ -168,7 +168,7 @@ async def show_dashboard(client, chat_id, message_id, user_id):
     try: await client.edit_message_text(chat_id, message_id, text, reply_markup=InlineKeyboardMarkup(buttons))
     except: pass
 
-# --- 5. BUTTONS ---
+# --- 6. BUTTONS ---
 @Client.on_callback_query()
 async def handle_buttons(client, query: CallbackQuery):
     user_id = query.from_user.id
@@ -196,7 +196,7 @@ async def handle_buttons(client, query: CallbackQuery):
         await query.message.edit("🚀 **Starting...**")
         await process_task(client, query.message, user_id)
 
-# --- 6. PROCESSOR ---
+# --- 7. PROCESSOR ---
 async def process_task(client, status_msg, user_id):
     task = TASKS[user_id]
     url, custom_name, mode = task["url"], task["custom_name"], task["mode"]
@@ -230,7 +230,9 @@ async def process_task(client, status_msg, user_id):
                 async with sess.get(url) as resp:
                     with open(final_path, 'wb') as f:
                         while True:
-                            chunk = await resp.content.read(1024*1024); if not chunk: break; f.write(chunk)
+                            chunk = await resp.content.read(1024*1024)
+                            if not chunk: break
+                            f.write(chunk)
 
         if custom_name and not task["is_youtube"]:
             ext = os.path.splitext(final_path)[1]
