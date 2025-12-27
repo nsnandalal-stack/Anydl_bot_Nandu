@@ -15,90 +15,71 @@ from plugins.command import USER_THUMBS, is_authorized
 TASKS = {}
 aria2 = aria2p.API(aria2p.Client(host="http://localhost", port=6800, secret=""))
 
-# --- 1. HELPER: GET YOUTUBE INFO (WITH COOKIES) ---
+# 🚀 TURBO TRACKERS
+TRACKERS = [
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.tiny-vps.com:6969/announce",
+    "udp://tracker.internetwarriors.net:1337/announce",
+    "udp://tracker.coppersurfer.tk:6969/announce",
+    "udp://exodus.desync.com:6969/announce"
+]
+
+# --- 1. HELPER: GET YOUTUBE INFO ---
 def get_yt_resolutions(url):
     try:
-        # 🍪 COOKIE CHECK
-        ydl_opts = {'quiet': True, 'no_warnings': True, 'geo_bypass': True}
-        if os.path.exists('cookies.txt'):
-            ydl_opts['cookiefile'] = 'cookies.txt'
+        ydl_opts = {'quiet': True, 'no_warnings': True, 'geo_bypass': True, 'noplaylist': True}
+        if os.path.exists('cookies.txt'): ydl_opts['cookiefile'] = 'cookies.txt'
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
             title = info.get('title', 'Video')
             formats_found = []
             seen_heights = set()
-            
             for f in info['formats']:
                 height = f.get('height')
                 filesize = f.get('filesize') or f.get('filesize_approx')
-                
                 if height and height in [1080, 720, 480, 360] and height not in seen_heights:
                     size_text = humanbytes(filesize) if filesize else "N/A"
-                    formats_found.append({
-                        "res": f"{height}p",
-                        "size": size_text,
-                        "height": height
-                    })
+                    formats_found.append({"res": f"{height}p", "size": size_text, "height": height})
                     seen_heights.add(height)
-
             formats_found.sort(key=lambda x: x['height'], reverse=True)
             return title, formats_found
-    except Exception as e:
-        print(f"Error extracting info: {e}")
-        return None, []
+    except: return None, []
 
-# --- 2. HELPER: DOWNLOADER (WITH COOKIES) ---
+# --- 2. HELPER: DOWNLOADER ---
 def run_ytdlp(url, quality_setting, output_path):
-    ydl_opts = {
-        'outtmpl': f'{output_path}/%(title)s.%(ext)s',
-        'quiet': True, 'no_warnings': True, 'geo_bypass': True,
-    }
-
-    # 🍪 COOKIE CHECK
-    if os.path.exists('cookies.txt'):
-        ydl_opts['cookiefile'] = 'cookies.txt'
+    ydl_opts = {'outtmpl': f'{output_path}/%(title)s.%(ext)s', 'quiet': True, 'geo_bypass': True, 'noplaylist': True}
+    if os.path.exists('cookies.txt'): ydl_opts['cookiefile'] = 'cookies.txt'
 
     if quality_setting == "audio":
-        ydl_opts.update({
-            'format': 'bestaudio/best',
-            'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]
-        })
+        ydl_opts.update({'format': 'bestaudio/best', 'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '192'}]})
     else:
-        ydl_opts.update({
-            'format': f'bestvideo[height<={quality_setting}]+bestaudio/best[height<={quality_setting}]',
-            'merge_output_format': 'mp4'
-        })
+        ydl_opts.update({'format': f'bestvideo[height<={quality_setting}]+bestaudio/best[height<={quality_setting}]', 'merge_output_format': 'mp4'})
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         ext = 'mp3' if quality_setting == 'audio' else 'mp4'
         return ydl.prepare_filename(info).rsplit('.', 1)[0] + f'.{ext}'
 
-# --- 3. HELPER: FIND LARGEST FILE ---
 def find_largest_file(path):
     if os.path.isfile(path): return path
     largest_file, largest_size = None, 0
     for root, dirs, files in os.walk(path):
         for file in files:
-            fp = os.path.join(root, file)
-            fs = os.path.getsize(fp)
+            fp = os.path.join(root, file); fs = os.path.getsize(fp)
             if fs > largest_size: largest_size = fs; largest_file = fp
     return largest_file
 
-# --- 4. ENTRY POINT ---
+# --- 3. ENTRY POINT ---
 @Client.on_message(filters.private & (filters.regex(r'http') | filters.regex(r'magnet') | filters.document | filters.video | filters.audio))
 async def incoming_task(client, message):
     user_id = message.from_user.id
-    if not is_authorized(user_id):
-        await message.reply_text("⚠️ Access Denied."); return
+    if not is_authorized(user_id): await message.reply_text("⚠️ Access Denied."); return
 
     url = None; is_torrent = False; is_youtube = False; is_tg_file = False; tg_obj = None; custom_name = None
-    
     if message.document or message.video or message.audio:
-        if message.document and str(message.document.file_name).endswith(".torrent"):
-            is_torrent = True; url = await message.download()
+        if message.document and str(message.document.file_name).endswith(".torrent"): is_torrent = True; url = await message.download()
         else:
             is_tg_file = True; tg_obj = message
             if message.document: custom_name = message.document.file_name
@@ -122,9 +103,9 @@ async def incoming_task(client, message):
     if not url and not is_tg_file: return
 
     TASKS[user_id] = {
-        "url": url, "is_torrent": is_torrent, "is_youtube": is_youtube,
-        "is_tg_file": is_tg_file, "tg_obj": tg_obj, "custom_name": custom_name,
-        "mode": "video", "yt_resolutions": [], "chat_id": message.chat.id, "message_id": None
+        "url": url, "is_torrent": is_torrent, "is_youtube": is_youtube, "is_tg_file": is_tg_file,
+        "tg_obj": tg_obj, "custom_name": custom_name, "mode": "video", "yt_resolutions": [], 
+        "gid": None, "chat_id": message.chat.id, "message_id": None
     }
 
     sent_msg = await message.reply_text("🔄 **Analyzing...**", quote=True)
@@ -133,15 +114,12 @@ async def incoming_task(client, message):
     if is_youtube:
         await sent_msg.edit("🔎 **Scanning YouTube...**")
         title, formats = await asyncio.to_thread(get_yt_resolutions, url)
-        if not formats:
-            await sent_msg.edit("❌ **YouTube Blocked or Error.**\nCheck `cookies.txt` or try a different link."); del TASKS[user_id]; return
-        
-        TASKS[user_id]["yt_resolutions"] = formats
-        TASKS[user_id]["custom_name"] = title
+        if not formats: await sent_msg.edit("❌ **YouTube Error.**\nCheck `cookies.txt` or Link."); del TASKS[user_id]; return
+        TASKS[user_id]["yt_resolutions"] = formats; TASKS[user_id]["custom_name"] = title
         
     await show_dashboard(client, message.chat.id, sent_msg.id, user_id)
 
-# --- 5. DASHBOARD ---
+# --- 4. DASHBOARD ---
 async def show_dashboard(client, chat_id, message_id, user_id):
     if user_id not in TASKS: return
     task = TASKS[user_id]
@@ -153,26 +131,37 @@ async def show_dashboard(client, chat_id, message_id, user_id):
         for fmt in task["yt_resolutions"]:
             buttons.append([InlineKeyboardButton(f"🎬 {fmt['res']} ({fmt['size']})", callback_data=f"yt_set_{fmt['height']}")])
         buttons.append([InlineKeyboardButton("🎵 Audio Only (MP3)", callback_data="yt_set_audio")])
-        buttons.append([InlineKeyboardButton("✏️ Rename", callback_data="ask_rename"), InlineKeyboardButton("❌ Cancel", callback_data="cancel_task")])
+        buttons.append([InlineKeyboardButton("✏️ Rename", callback_data="ask_rename"), InlineKeyboardButton("❌ Cancel", callback_data="cancel")])
     elif task["is_tg_file"]:
         text = f"📂 **File Manager**\n**Name:** `{name}`\n👇 **Rename or Upload:**"
         buttons = [[InlineKeyboardButton("✏️ Rename", callback_data="ask_rename")],
-                   [InlineKeyboardButton("▶️ Process", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel_task")]]
+                   [InlineKeyboardButton("▶️ Process", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
     else:
         mode_txt = "Streamable Video" if task["mode"] == "video" else "Normal File"
         sw_btn = "📂 Switch to File" if task["mode"] == "video" else "🎥 Switch to Video"
         text = f"⚙️ **Link Dashboard**\n**Source:** {'🧲 Torrent' if task['is_torrent'] else '🔗 Link'}\n**Name:** `{name}`\n**Mode:** {mode_txt}"
         buttons = [[InlineKeyboardButton(sw_btn, callback_data="toggle_mode"), InlineKeyboardButton("✏️ Rename", callback_data="ask_rename")],
-                   [InlineKeyboardButton("▶️ Start Download", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel_task")]]
+                   [InlineKeyboardButton("▶️ Start Download", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
 
     try: await client.edit_message_text(chat_id, message_id, text, reply_markup=InlineKeyboardMarkup(buttons))
     except: pass
 
-# --- 6. BUTTONS ---
+# --- 5. BUTTONS ---
 @Client.on_callback_query()
 async def handle_buttons(client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data
+    
+    if data == "cancel" or data == "cancel_task":
+        if user_id in TASKS:
+            gid = TASKS[user_id].get("gid")
+            if gid:
+                try: aria2.remove([gid]); aria2.force_remove([gid])
+                except: pass
+            del TASKS[user_id]
+        await query.message.edit("❌ **Task Cancelled.**")
+        return
+
     if user_id not in TASKS: await query.answer("❌ Expired.", show_alert=True); return
 
     if data.startswith("yt_set_"):
@@ -190,36 +179,62 @@ async def handle_buttons(client, query: CallbackQuery):
     elif data == "back_to_menu":
         TASKS[user_id]["state"] = "menu"
         await show_dashboard(client, query.message.chat.id, query.message.id, user_id)
-    elif data == "cancel_task":
-        del TASKS[user_id]; await query.message.edit("❌ Cancelled.")
     elif data == "start_process":
         await query.message.edit("🚀 **Starting...**")
         await process_task(client, query.message, user_id)
 
-# --- 7. PROCESSOR ---
+# --- 6. PROCESSOR ---
 async def process_task(client, status_msg, user_id):
     task = TASKS[user_id]
     url, custom_name, mode = task["url"], task["custom_name"], task["mode"]
     download_path, start_time = "downloads/", time.time()
     if not os.path.exists(download_path): os.makedirs(download_path)
-    final_path, gid = None, None
+    final_path = None
 
     try:
         if task["is_youtube"]:
             await status_msg.edit(f"⬇️ **Downloading YouTube ({mode})...**")
             final_path = await asyncio.to_thread(run_ytdlp, url, mode, download_path)
+        
         elif task["is_torrent"]:
+            # 🚀 ADD TRACKERS
+            if "magnet:?" in url: 
+                for tr in TRACKERS: url += f"&tr={tr}"
+            
             dl = aria2.add_torrent(url) if os.path.isfile(url) else aria2.add_magnet(url)
             if os.path.isfile(url): os.remove(url)
-            gid = dl.gid
+            
+            TASKS[user_id]["gid"] = dl.gid
+            
             while not dl.is_complete:
-                dl.update(); p = dl.completed_length * 100 / dl.total_length if dl.total_length else 0
+                if user_id not in TASKS: return
+                dl.update()
                 if dl.status == 'error': await status_msg.edit("❌ Torrent Error."); return
-                if time.time() - start_time > 4:
-                     try: await status_msg.edit(f"⬇️ **Downloading Torrent...**\n⏳ **{round(p,2)}%**", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel ❌", callback_data="cancel")]]))
-                     except: pass
+                
+                # 📊 PRO DASHBOARD LOGIC
+                if dl.total_length > 0:
+                    done = dl.completed_length
+                    total = dl.total_length
+                    percent = (done / total) * 100
+                    speed = humanbytes(dl.download_speed)
+                    
+                    # Create Visual Bar [■■■■□□□□□□]
+                    bar_len = 10
+                    filled = int(percent / 10)
+                    bar = "■" * filled + "□" * (bar_len - filled)
+                    
+                    msg = (
+                        f"⬇️ **Downloading Torrent...**\n"
+                        f"💾 **Size:** {humanbytes(done)} / {humanbytes(total)}\n"
+                        f"⚡ **Speed:** {speed}/s | 👥 **Peers:** {dl.connections}\n"
+                        f"⏳ **Prog:** [{bar}] `{round(percent, 2)}%`"
+                    )
+                    
+                    try: await status_msg.edit(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel ❌", callback_data="cancel")]]))
+                    except: pass
                 await asyncio.sleep(4)
             final_path = find_largest_file(str(dl.files[0].path)) or find_largest_file("downloads/")
+
         elif task["is_tg_file"]:
             await status_msg.edit("⬇️ **Downloading File...**")
             final_path = await client.download_media(task["tg_obj"], file_name=download_path, progress=progress_for_pyrogram, progress_args=("⬇️ Downloading...", status_msg, start_time))
@@ -230,10 +245,11 @@ async def process_task(client, status_msg, user_id):
                 async with sess.get(url) as resp:
                     with open(final_path, 'wb') as f:
                         while True:
-                            chunk = await resp.content.read(1024*1024)
-                            if not chunk: break
-                            f.write(chunk)
+                            chunk = await resp.content.read(1024*1024); if not chunk: break; f.write(chunk)
 
+        # RENAME & UPLOAD
+        if user_id not in TASKS: return
+        
         if custom_name and not task["is_youtube"]:
             ext = os.path.splitext(final_path)[1]
             if not os.path.splitext(custom_name)[1]: custom_name += ext
@@ -257,7 +273,8 @@ async def process_task(client, status_msg, user_id):
         await status_msg.delete(); 
         if os.path.exists(final_path): os.remove(final_path)
         if thumb_path and "thumbs/" not in thumb_path and os.path.exists(thumb_path): os.remove(thumb_path)
-        if gid: aria2.remove([gid])
+        if TASKS[user_id].get("gid"): aria2.remove([TASKS[user_id]["gid"]])
         del TASKS[user_id]
     except Exception as e:
-        await status_msg.edit(f"❌ **Error:** {e}"); del TASKS[user_id]
+        await status_msg.edit(f"❌ **Error:** {e}"); 
+        if user_id in TASKS: del TASKS[user_id]
