@@ -3,17 +3,15 @@ from os import environ
 import logging
 from aiohttp import web
 import asyncio
+import os
 
-# 1. Setup Logging
 logging.basicConfig(level=logging.INFO)
 
-# 2. Load Secrets
 API_ID = int(environ.get("API_ID", 0))
 API_HASH = environ.get("API_HASH")
 BOT_TOKEN = environ.get("BOT_TOKEN")
 PORT = int(environ.get("PORT", 8000))
 
-# 3. Define the Bot
 app = Client(
     "anydl_bot",
     api_id=API_ID,
@@ -24,11 +22,9 @@ app = Client(
     in_memory=True
 )
 
-# 4. Fake Web Server (Koyeb Fix)
 async def web_server():
     async def handle(request):
-        return web.Response(text="Bot is Running!")
-
+        return web.Response(text="Bot is Alive!")
     server = web.Application()
     server.router.add_get("/", handle)
     runner = web.AppRunner(server)
@@ -37,8 +33,11 @@ async def web_server():
     await site.start()
     print(f"🕸️ Fake Web Server started on Port {PORT}")
 
-# 5. Run Everything
 async def main():
+    print("⚡ Starting Aria2 (Torrent Engine)...")
+    # This line is REQUIRED for Torrents to work
+    os.system("aria2c --enable-rpc --rpc-listen-all=false --rpc-listen-port=6800 --daemon")
+    
     print("⚡ Starting Bot + Web Server...")
     await app.start()
     await web_server()
