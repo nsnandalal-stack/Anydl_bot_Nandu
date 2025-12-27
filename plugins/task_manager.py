@@ -202,7 +202,6 @@ async def process_task(client, status_msg, user_id):
             
             dl = aria2.add_torrent(url) if os.path.isfile(url) else aria2.add_magnet(url)
             if os.path.isfile(url): os.remove(url)
-            
             TASKS[user_id]["gid"] = dl.gid
             
             while not dl.is_complete:
@@ -215,22 +214,27 @@ async def process_task(client, status_msg, user_id):
                     total = dl.total_length
                     percent = (done / total) * 100
                     speed = humanbytes(dl.download_speed)
+                    bar = "■" * int(percent / 10) + "□" * (10 - int(percent / 10))
                     
-                    bar_len = 10
-                    filled = int(percent / 10)
-                    bar = "■" * filled + "□" * (bar_len - filled)
-                    
-                    msg = (
-                        f"⬇️ **Downloading Torrent...**\n"
-                        f"💾 **Size:** {humanbytes(done)} / {humanbytes(total)}\n"
-                        f"⚡ **Speed:** {speed}/s | 👥 **Peers:** {dl.connections}\n"
-                        f"⏳ **Prog:** [{bar}] `{round(percent, 2)}%`"
-                    )
-                    
+                    msg = (f"⬇️ **Torrent...**\n💾 `{humanbytes(done)}` / `{humanbytes(total)}`\n"
+                           f"⚡ `{speed}/s` | 👥 `{dl.connections}`\n⏳ [{bar}] `{round(percent, 2)}%`")
                     try: await status_msg.edit(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel ❌", callback_data="cancel")]]))
                     except: pass
                 await asyncio.sleep(4)
-            final_path = find_largest_file(str(dl.files[0].path)) or find_largest_file("downloads/")
+            
+            # --- SAFE FILE FINDER ---
+            # Try to find file in download path
+            search_path = str(dl.files[0].path) if dl.files else "downloads/"
+            final_path = find_largest_file(search_path)
+            
+            # If still None, search the root download folder
+            if not final_path:
+                final_path = find_largest_file("downloads/")
+                
+            # If STILL None (Empty torrent?), abort
+            if not final_path:
+                await status_msg.edit("❌ **Error:** No valid file found in torrent.")
+                return
 
         elif task["is_tg_file"]:
             await status_msg.edit("⬇️ **Downloading File...**")
@@ -242,16 +246,18 @@ async def process_task(client, status_msg, user_id):
                 async with sess.get(url) as resp:
                     with open(final_path, 'wb') as f:
                         while True:
-                            # --- FIXED BLOCK START ---
                             chunk = await resp.content.read(1024*1024)
-                            if not chunk: 
-                                break
+                            if not chunk: break
                             f.write(chunk)
-                            # --- FIXED BLOCK END ---
 
         # RENAME & UPLOAD
         if user_id not in TASKS: return
         
+        # Verify file exists before processing
+        if not final_path or not os.path.exists(final_path):
+             await status_msg.edit("❌ **Error:** Downloaded file disappeared.")
+             return
+
         if custom_name and not task["is_youtube"]:
             ext = os.path.splitext(final_path)[1]
             if not os.path.splitext(custom_name)[1]: custom_name += ext
