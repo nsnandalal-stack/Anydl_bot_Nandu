@@ -7,7 +7,7 @@ import asyncio
 import aria2p
 from helper_funcs.display import progress_for_pyrogram, humanbytes
 
-# Connect to the internal Torrent Engine
+# Connect to the internal Torrent Engine (Aria2)
 aria2 = aria2p.API(
     aria2p.Client(
         host="http://localhost",
@@ -29,12 +29,14 @@ async def torrent_handler(client, message):
             return
     else:
         magnet_link = message.text.strip()
+        
         # Rename Logic: magnet... | NewName.mp4
         custom_name = None
         if "|" in magnet_link:
             magnet_link, custom_name = magnet_link.split("|")
             magnet_link = magnet_link.strip()
             custom_name = custom_name.strip()
+            
         try:
             download = aria2.add_magnet(magnet_link)
         except Exception as e:
