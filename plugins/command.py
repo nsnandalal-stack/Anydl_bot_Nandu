@@ -1,17 +1,31 @@
 from pyrogram import Client, filters
 import os
 
-# Store user settings in memory (resets if bot restarts on free tier)
+# --- 🔒 AUTHENTICATION ---
+# REPLACE '12345678' WITH YOUR OWN TELEGRAM USER ID
+# You can add multiple IDs separated by commas: [12345678, 98765432]
+AUTH_USERS = [12345678] 
+
+# Helper to check access
+def is_authorized(user_id):
+    return user_id in AUTH_USERS
+
+# Store user settings in memory
 USER_THUMBS = {}
 
 @Client.on_message(filters.command("start"))
 async def start_command(client, message):
+    # 🔒 Security Check
+    if not is_authorized(message.from_user.id):
+        await message.reply_text("⚠️ You are not authorized. Contact the owner: @poocha")
+        return
+
     await message.reply_text(
-        "👋 **Hello! I am your Pro Downloader.**\n\n"
+        "👋 **Hello! I am your Private Pro Downloader.**\n\n"
         "**Features:**\n"
         "🎥 Streamable Videos\n"
-        "🖼️ Custom Thumbnails\n"
-        "📸 Auto-Screenshots\n\n"
+        "🟥 YouTube Support\n"
+        "🧲 Torrent & Magnet Support\n\n"
         "**Commands:**\n"
         "/set_thumb - Reply to an image to set custom thumbnail\n"
         "/del_thumb - Delete your custom thumbnail\n"
@@ -20,8 +34,11 @@ async def start_command(client, message):
 
 @Client.on_message(filters.command("set_thumb") & filters.reply)
 async def set_thumbnail(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply_text("⚠️ You are not authorized. Contact the owner: @poocha")
+        return
+
     if message.reply_to_message.photo:
-        # Download the photo to a specific path for this user
         path = await client.download_media(message.reply_to_message, file_name=f"thumbs/{message.from_user.id}.jpg")
         USER_THUMBS[message.from_user.id] = path
         await message.reply_text("✅ **Thumbnail Saved!** Future videos will use this cover.")
@@ -30,6 +47,10 @@ async def set_thumbnail(client, message):
 
 @Client.on_message(filters.command("del_thumb"))
 async def delete_thumbnail(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply_text("⚠️ You are not authorized. Contact the owner: @poocha")
+        return
+
     user_id = message.from_user.id
     if user_id in USER_THUMBS:
         if os.path.exists(USER_THUMBS[user_id]):
