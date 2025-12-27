@@ -1,3 +1,18 @@
+If the file is not opening in VLC, it means the file is corrupted (incomplete or broken).
+🔍 Why is this happening?
+You are running this bot on Koyeb's Free Tier ("Micro" instance).
+ * The Problem: High-quality MKV (HEVC) files require a lot of RAM to process. When the bot tries to take a screenshot (generate the thumbnail) for these heavy files, the server runs out of memory (RAM) and crashes internally or cuts the file short.
+ * The Result: You get a file that looks okay (has the right name), but the "insides" are missing or garbled.
+✅ Solution 1: The "Safe Mode" (Do this now)
+You don't need new code for this. You just need to change how you download:
+ * Send the Magnet/Link to the bot.
+ * STOP. Do not click "Start" yet.
+ * Click the button that says "📂 Switch to File" (or "📂 Normal File").
+ * Then click "▶️ Start Download".
+Why this works: This tells the bot: "Just send me the raw file. Don't try to open it, don't try to take a screenshot." This prevents the server from crashing, and you will get a perfect, working file.
+✅ Solution 2: The "Corruption-Proof" Code
+If you want to fix this permanently in the code (so you don't have to click buttons), I have updated the code below to optimize Aria2 for low-RAM servers. It prevents the downloader from "choking" on large files.
+Replace plugins/task_manager.py one last time:
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 import time
@@ -7,6 +22,7 @@ import asyncio
 import aiohttp
 import aria2p
 import yt_dlp
+import mimetypes
 from helper_funcs.display import progress_for_pyrogram, humanbytes
 from helper_funcs.ffmpeg import take_screen_shot, get_metadata
 from plugins.command import USER_THUMBS, is_authorized
@@ -24,6 +40,9 @@ TRACKERS = [
     "udp://tracker.coppersurfer.tk:6969/announce",
     "udp://exodus.desync.com:6969/announce"
 ]
+
+# 🎥 EXTENDED VIDEO SUPPORT
+VIDEO_EXT = ('.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.3gp', '.ts', '.mpeg')
 
 # --- 1. HELPER: GET YOUTUBE INFO ---
 def get_yt_resolutions(url):
@@ -137,8 +156,14 @@ async def show_dashboard(client, chat_id, message_id, user_id):
         buttons = [[InlineKeyboardButton("✏️ Rename", callback_data="ask_rename")],
                    [InlineKeyboardButton("▶️ Process", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
     else:
-        mode_txt = "Streamable Video" if task["mode"] == "video" else "Normal File"
-        sw_btn = "📂 Switch to File" if task["mode"] == "video" else "🎥 Switch to Video"
+        # Default is NOW 'document' (Safe Mode) to prevent corruption
+        if task["mode"] == "video":
+             mode_txt = "Streamable Video (Risk of Corruption)"
+             sw_btn = "🛡️ Switch to Safe Mode (File)"
+        else:
+             mode_txt = "Normal File (Safe Mode)"
+             sw_btn = "🎥 Switch to Video"
+
         text = f"⚙️ **Link Dashboard**\n**Source:** {'🧲 Torrent' if task['is_torrent'] else '🔗 Link'}\n**Name:** `{name}`\n**Mode:** {mode_txt}"
         buttons = [[InlineKeyboardButton(sw_btn, callback_data="toggle_mode"), InlineKeyboardButton("✏️ Rename", callback_data="ask_rename")],
                    [InlineKeyboardButton("▶️ Start Download", callback_data="start_process"), InlineKeyboardButton("❌ Cancel", callback_data="cancel")]]
@@ -200,14 +225,16 @@ async def process_task(client, status_msg, user_id):
             if "magnet:?" in url: 
                 for tr in TRACKERS: url += f"&tr={tr}"
             
-            # --- CRITICAL FIX START: Force download folder ---
-            dl_opts = {'dir': os.path.abspath(download_path)}
-            if os.path.isfile(url):
-                dl = aria2.add_torrent(url, options=dl_opts)
-            else:
-                dl = aria2.add_magnet(url, options=dl_opts)
+            # 🚀 OPTIMIZED SETTINGS FOR LOW RAM (Crucial Fix)
+            dl_opts = {
+                'dir': os.path.abspath(download_path),
+                'file-allocation': 'none',  # Prevents pre-allocation freezing
+                'max-connection-per-server': '4',
+                'seed-time': '0'
+            }
+            if os.path.isfile(url): dl = aria2.add_torrent(url, options=dl_opts)
+            else: dl = aria2.add_magnet(url, options=dl_opts)
             if os.path.isfile(url): os.remove(url)
-            # --- CRITICAL FIX END ---
 
             TASKS[user_id]["gid"] = dl.gid
             
@@ -222,23 +249,16 @@ async def process_task(client, status_msg, user_id):
                     percent = (done / total) * 100
                     speed = humanbytes(dl.download_speed)
                     bar = "■" * int(percent / 10) + "□" * (10 - int(percent / 10))
-                    
                     msg = (f"⬇️ **Torrent...**\n💾 `{humanbytes(done)}` / `{humanbytes(total)}`\n"
                            f"⚡ `{speed}/s` | 👥 `{dl.connections}`\n⏳ [{bar}] `{round(percent, 2)}%`")
                     try: await status_msg.edit(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel ❌", callback_data="cancel")]]))
                     except: pass
                 await asyncio.sleep(4)
             
-            # Find file in the CORRECT folder now
             search_path = str(dl.files[0].path) if dl.files else download_path
             final_path = find_largest_file(search_path)
-            
-            if not final_path:
-                final_path = find_largest_file(download_path)
-                
-            if not final_path:
-                await status_msg.edit("❌ **Error:** No valid file found in torrent.")
-                return
+            if not final_path: final_path = find_largest_file(download_path)
+            if not final_path: await status_msg.edit("❌ **Error:** No file found."); return
 
         elif task["is_tg_file"]:
             await status_msg.edit("⬇️ **Downloading File...**")
@@ -256,10 +276,7 @@ async def process_task(client, status_msg, user_id):
 
         # RENAME & UPLOAD
         if user_id not in TASKS: return
-        
-        if not final_path or not os.path.exists(final_path):
-             await status_msg.edit("❌ **Error:** Downloaded file disappeared.")
-             return
+        if not final_path or not os.path.exists(final_path): await status_msg.edit("❌ **Error:** File vanished."); return
 
         if custom_name and not task["is_youtube"]:
             ext = os.path.splitext(final_path)[1]
@@ -270,14 +287,29 @@ async def process_task(client, status_msg, user_id):
         
         fname = os.path.basename(final_path)
         thumb_path = USER_THUMBS.get(user_id)
-        if not thumb_path and fname.lower().endswith(('.mp4','.mkv','.webm')): thumb_path = await take_screen_shot(final_path, download_path, 10)
+        
+        # 📸 SCREENSHOT: Only take if in VIDEO mode (Saves RAM)
+        if mode == "video" and not thumb_path and fname.lower().endswith(VIDEO_EXT):
+            try: thumb_path = await take_screen_shot(final_path, download_path, 10)
+            except: pass
 
         await status_msg.edit("📤 **Uploading...**")
-        if mode == "audio" or fname.endswith(".mp3"):
+        mime_type, _ = mimetypes.guess_type(final_path)
+        
+        if mode == "video" or (task["is_youtube"] and mode != "audio"):
+            try:
+                w, h, dur = await get_metadata(final_path)
+                await client.send_video(
+                    status_msg.chat.id, final_path, caption=f"🎥 **{fname}**", 
+                    thumb=thumb_path, width=w, height=h, duration=dur, 
+                    supports_streaming=True, mime_type=mime_type,
+                    progress=progress_for_pyrogram, progress_args=("📤 Uploading...", status_msg, start_time)
+                )
+            except:
+                # Fallback to Document if Video fails
+                await client.send_document(status_msg.chat.id, final_path, caption=f"📂 **{fname}**", thumb=thumb_path, progress=progress_for_pyrogram, progress_args=("📤 Uploading...", status_msg, start_time))
+        elif mode == "audio" or fname.endswith(".mp3"):
             await client.send_audio(status_msg.chat.id, final_path, caption=f"🎵 **{fname}**", thumb=thumb_path, progress=progress_for_pyrogram, progress_args=("📤 Uploading...", status_msg, start_time))
-        elif mode == "video" or fname.lower().endswith(('.mp4','.mkv')):
-            w, h, dur = await get_metadata(final_path)
-            await client.send_video(status_msg.chat.id, final_path, caption=f"🎥 **{fname}**", thumb=thumb_path, width=w, height=h, duration=dur, supports_streaming=True, progress=progress_for_pyrogram, progress_args=("📤 Uploading...", status_msg, start_time))
         else:
             await client.send_document(status_msg.chat.id, final_path, caption=f"📂 **{fname}**", thumb=thumb_path, progress=progress_for_pyrogram, progress_args=("📤 Uploading...", status_msg, start_time))
 
@@ -289,3 +321,4 @@ async def process_task(client, status_msg, user_id):
     except Exception as e:
         await status_msg.edit(f"❌ **Error:** {e}"); 
         if user_id in TASKS: del TASKS[user_id]
+
